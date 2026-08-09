@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+@layer base {
+  * {
+    border-color: #e8e5df;
+  }
+  body {
+    background-color: #0b0b0a;
+    color: #ffffff;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
+
+/* ===== SCROLLBAR PREMIUM ÁUREA ===== */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+/* Fondo de la pista */
+::-webkit-scrollbar-track {
+  background: #161412; /* Tono oscuro de la marca */
+}
+
+/* La barra móvil */
+::-webkit-scrollbar-thumb {
+  background: #C9A96A; /* Tono dorado/champagne */
+  border-radius: 8px;
+  /* El borde del mismo color de la pista hace que la barra se vea más delgada y elegante */
+  border: 2px solid #161412; 
+}
+
+/* Hover sobre la barra */
+::-webkit-scrollbar-thumb:hover {
+  background: #A07D38; /* Dorado más oscuro */
+}
