@@ -30,6 +30,7 @@ import DocumentosWidget from "./documentos/page";
 import NotificacionesWidget from "./notificaciones/page";
 import PagosWidget from "./pagos/page";
 import TareasWidget from "./tareas/page";
+import SeleccionarEventoWidget from "./seleccionar-evento/page";
 
 // ---------------------------------------------------------------------------
 // TIPOS M1 - Refrendados por el Plan Backend
@@ -53,16 +54,11 @@ interface UserProfile {
 // ---------------------------------------------------------------------------
 // HELPERS VISUALES (Se mantienen para imágenes/locaciones no implementadas en DB)
 // ---------------------------------------------------------------------------
+// Imágenes y locaciones de ejemplo para las tarjetas de eventos (reemplazar cuando el backend tenga archivos multimedia)
 const SIMULATED_LOCATIONS = ["Hacienda El Rosal", "Casa Toscana", "Villa de las Flores", "Finca San Miguel"];
 const SIMULATED_IMAGES = ["/images/gallery/1.png", "/images/gallery/2.png", "/images/gallery/3.png", "/images/gallery/4.png"];
 
-// Muestra de Tareas (Siguen siendo simuladas hasta mergear M2 controlador)
-const pendingTasksSimulated = [
-  { id: 1, title: "Confirmar menú degustación", couple: "Maria & Juan", date: "15 May" },
-  { id: 2, title: "Enviar cronograma final", couple: "Valentina & Andrés", date: "16 May" },
-  { id: 3, title: "Reunión con decoración", couple: "Isabella & Felipe", date: "18 May" },
-  { id: 4, title: "Confirmar número de invitados", couple: "Camila & Santiago", date: "20 May" },
-];
+
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -79,6 +75,13 @@ export default function DashboardPage() {
   const [realEvents, setRealEvents] = useState<EventMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+
+  // código nuevo edición — Estados para datos reales de pagos y tareas del dashboard.
+  // Antes eran valores simulados hardcoded ($245.000.000 y 18 tareas).
+  // Ahora se cargan de la API usando los mismos endpoints que usan las páginas de pagos y tareas.
+  const [paymentSummary, setPaymentSummary] = useState({ totalPaid: 0, totalPending: 0 });
+  const [pendingTasksCount, setPendingTasksCount] = useState(0);
+  const [pendingTasksList, setPendingTasksList] = useState<{ id: string; title: string; couple: string; date: string }[]>([]);
 
   // ===================================================================
   // CARGA DE DATOS REALES (M0 y M1)
@@ -114,6 +117,48 @@ export default function DashboardPage() {
               imageSim: SIMULATED_IMAGES[index % SIMULATED_IMAGES.length],
             }));
             setRealEvents(processedEvents);
+
+            // código nuevo edición — Cargar resumen de pagos y tareas pendientes de todos los eventos.
+            // Por cada evento, llama a GET /events/:eventId/payments/summary y GET /events/:eventId/tasks.
+            // Suma los totales de todos los eventos para mostrar en los KPIs del dashboard.
+            // Si algún evento falla, lo ignora silenciosamente (no rompe el dashboard).
+            let totalPaid = 0;
+            let totalPending = 0;
+            let totalPendingTasks = 0;
+            const allPendingTasks: { id: string; title: string; couple: string; date: string }[] = [];
+
+            for (const evt of processedEvents) {
+              const [summaryRes, tasksRes] = await Promise.all([
+                apiFetch(`/events/${evt.id}/payments/summary`).catch(() => null),
+                apiFetch(`/events/${evt.id}/tasks`).catch(() => null),
+              ]);
+
+              if (summaryRes?.ok) {
+                const summary = await summaryRes.json();
+                totalPaid += Number(summary.totalPaid) || 0;
+                totalPending += Number(summary.totalPending) || 0;
+              }
+
+              if (tasksRes?.ok) {
+                const tasks = await tasksRes.json();
+                if (Array.isArray(tasks)) {
+                  const pending = tasks.filter((t: any) => t.status === "PENDING");
+                  totalPendingTasks += pending.length;
+                  pending.forEach((t: any) => {
+                    allPendingTasks.push({
+                      id: t.id,
+                      title: t.title,
+                      couple: evt.coupleName || evt.name || "Sin evento",
+                      date: t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "Sin fecha",
+                    });
+                  });
+                }
+              }
+            }
+
+            setPaymentSummary({ totalPaid, totalPending });
+            setPendingTasksCount(totalPendingTasks);
+            setPendingTasksList(allPendingTasks.slice(0, 5));
           } else {
             setRealEvents([]);
           }
@@ -153,6 +198,7 @@ export default function DashboardPage() {
   // Menú lateral simplificado con las secciones reales que tenemos
   const navItems = [
     { id: "inicio", label: "Inicio", icon: LayoutDashboard },
+    { id: "seleccionar-evento", label: "Seleccionar Evento", icon: CalendarDays },
     { id: "presupuesto", label: "Pagos y Finanzas", icon: Wallet },
     { id: "tareas", label: "Checklist de Tareas", icon: CheckSquare },
     { id: "documentos", label: "Bóveda de Documentos", icon: FileText },
@@ -178,6 +224,8 @@ export default function DashboardPage() {
         return <ChatWidget />;
       case "notificaciones":
         return <NotificacionesWidget />;
+      case "seleccionar-evento":
+        return <SeleccionarEventoWidget />;
       case "inicio":
       default:
         // EL RESUMEN DEL DASHBOARD
@@ -195,7 +243,7 @@ export default function DashboardPage() {
 
             {/* ── 4 Tarjetas de Métricas (KPIs) ── */}
             <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-5 lg:grid-cols-4">
-              {/* KPIs Parcialmente Reales (Conteo de eventos M1) */}
+              {/* KPIs con datos reales de la API */}
               <div className="rounded-2xl border border-[#E8E2D5] bg-white p-3.5 shadow-xs transition-shadow hover:shadow-md sm:p-5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-[#7A7167] sm:text-[11px]">
@@ -224,33 +272,39 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* KPIs Simulados hasta controller M3 */}
-              <div className="rounded-2xl border border-dashed border-[#E8E2D5] bg-white p-3.5 shadow-inner opacity-80 sm:p-5">
+              {/* código nuevo edición — KPI de Presupuesto con datos reales de la API.
+              Antes mostraba $245.000.000 hardcoded. Ahora suma totalPaid + totalPending de todos los eventos. */}
+              <div className="rounded-2xl border border-[#E8E2D5] bg-white p-3.5 shadow-xs transition-shadow hover:shadow-md sm:p-5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#B3ABA0] sm:text-[11px]">
-                    (Sim) Presupuesto
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#7A7167] sm:text-[11px]">
+                    Presupuesto Total
                   </span>
-                  <div className="rounded-lg bg-[#F5F2EB] p-1.5 text-[#B3ABA0] sm:p-2">
+                  <div className="rounded-lg bg-[#FAF4EA] p-1.5 text-[#A07D38] sm:p-2">
                     <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-baseline gap-1 sm:mt-3">
-                  <span className="text-lg font-bold text-[#D9D1C5] sm:text-2xl">$245.000.000</span>
-                  <span className="text-[10px] font-semibold text-[#D9D1C5]">COP</span>
+                  <span className={`text-lg font-bold sm:text-2xl ${loading ? "animate-pulse text-[#D9D1C5]" : "text-[#1F1C19]"}`}>
+                    {loading ? "--" : `$${(paymentSummary.totalPaid + paymentSummary.totalPending).toLocaleString("es-CO")}`}
+                  </span>
+                  <span className="text-[10px] font-semibold text-[#8E8579]">COP</span>
                 </div>
               </div>
 
-              {/* KPIs Simulados hasta controller M2 */}
-              <div className="rounded-2xl border border-dashed border-[#E8E2D5] bg-white p-3.5 shadow-inner opacity-80 sm:p-5">
+              {/* código nuevo edición — KPI de Tareas Pendientes con datos reales de la API.
+              Antes mostraba 18 hardcoded. Ahora cuenta las tareas con status PENDING de todos los eventos. */}
+              <div className="rounded-2xl border border-[#E8E2D5] bg-white p-3.5 shadow-xs transition-shadow hover:shadow-md sm:p-5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#B3ABA0] sm:text-[11px]">
-                    (Sim) Tareas
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#7A7167] sm:text-[11px]">
+                    Tareas Pendientes
                   </span>
-                  <div className="rounded-lg bg-[#F5F2EB] p-1.5 text-[#B3ABA0] sm:p-2">
+                  <div className="rounded-lg bg-[#FAF4EA] p-1.5 text-[#A07D38] sm:p-2">
                     <CheckSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
-                <p className="mt-2 text-2xl font-bold text-[#D9D1C5] sm:mt-3 sm:text-3xl">18</p>
+                <p className={`mt-2 text-2xl font-bold sm:mt-3 sm:text-3xl ${loading ? "animate-pulse text-[#D9D1C5]" : "text-[#1F1C19]"}`}>
+                  {loading ? "--" : pendingTasksCount}
+                </p>
               </div>
             </div>
 
@@ -306,97 +360,109 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Widget 2: Presupuesto General (Dona - Simulado M3) */}
-              <div className="z-0 rounded-2xl border border-dashed border-[#E8E2D5] bg-white p-4 shadow-inner opacity-80 sm:p-6">
+              {/* código nuevo edición — Widget de Presupuesto con datos reales de la API.
+              Antes era un gráfico circular con valores hardcodeados ($245M, $145M, $70M).
+              Ahora calcula los porcentajes reales de pagado vs pendiente de todos los eventos.
+              Si no hay datos, muestra "Sin pagos registrados". */}
+              <div className="z-0 rounded-2xl border border-[#E8E2D5] bg-white p-4 shadow-xs sm:p-6">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xs font-bold tracking-wide text-[#B3ABA0] sm:text-sm">(Simulado M3) Presupuesto</h2>
+                  <h2 className="text-xs font-bold tracking-wide text-[#1F1C19] sm:text-sm">Presupuesto</h2>
                 </div>
-                {/* Gráfico circular */}
-                <div className="relative my-4 flex items-center justify-center">
-                  <svg className="h-32 w-32 -rotate-90 transform sm:h-40 sm:w-40" viewBox="0 0 100 100">
-                    {/* Fondo Base */}
-                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#EFEBE4" strokeWidth="11" />
-                    {/* Segmento 1: Pagado 60% */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="38"
-                      fill="transparent"
-                      stroke="#D9D1C5"
-                      strokeWidth="11"
-                      strokeDasharray="238.76"
-                      strokeDashoffset="95.5"
-                      strokeLinecap="round"
-                    />
-                    {/* Segmento 2: Pendiente 28% */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="38"
-                      fill="transparent"
-                      stroke="#EFEBE4"
-                      strokeWidth="11"
-                      strokeDasharray="238.76"
-                      strokeDashoffset="171.9"
-                      className="opacity-70"
-                    />
-                  </svg>
-
-                  {/* Texto Central */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-[#B3ABA0]">Total (Simulado)</span>
-                    <span className="text-xs font-bold text-[#D9D1C5] sm:text-sm">$245.000.000</span>
-                    <span className="text-[9px] font-medium text-[#D9D1C5]">COP</span>
+                {loading ? (
+                  <div className="flex items-center justify-center h-48 animate-pulse">
+                    <p className="text-xs text-[#B3ABA0]">Cargando...</p>
                   </div>
-                </div>
-
-                {/* Leyenda Simulada */}
-                <div className="mt-5 space-y-2 text-xs">
-                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-1.5 opacity-60">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#D9D1C5]" />
-                      <span className="text-[#6A6158]">Pagado</span>
+                ) : paymentSummary.totalPaid === 0 && paymentSummary.totalPending === 0 ? (
+                  <div className="flex items-center justify-center h-48 text-center">
+                    <p className="text-xs text-[#7A7167]">Sin pagos registrados en tus eventos.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Gráfico circular con datos reales */}
+                    <div className="relative my-4 flex items-center justify-center">
+                      <svg className="h-32 w-32 -rotate-90 transform sm:h-40 sm:w-40" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="#EFEBE4" strokeWidth="11" />
+                        <circle
+                          cx="50" cy="50" r="38" fill="transparent"
+                          stroke="#C9A96A" strokeWidth="11"
+                          strokeDasharray="238.76"
+                          strokeDashoffset={238.76 - (238.76 * (paymentSummary.totalPaid / (paymentSummary.totalPaid + paymentSummary.totalPending)))}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-[#7A7167]">Total</span>
+                        <span className="text-xs font-bold text-[#1F1C19] sm:text-sm">
+                          ${(paymentSummary.totalPaid + paymentSummary.totalPending).toLocaleString("es-CO")}
+                        </span>
+                        <span className="text-[9px] font-medium text-[#8E8579]">COP</span>
+                      </div>
                     </div>
-                    <span className="font-semibold text-[#D9D1C5]">$145.000.000</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-0.5 opacity-60">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#E5DDD0]" />
-                      <span className="text-[#6A6158]">Pendiente</span>
+                    <div className="mt-5 space-y-2 text-xs">
+                      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-[#C9A96A]" />
+                          <span className="text-[#6A6158]">Pagado</span>
+                        </div>
+                        <span className="font-semibold text-[#1F1C19]">${paymentSummary.totalPaid.toLocaleString("es-CO")}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-[#E5DDD0]" />
+                          <span className="text-[#6A6158]">Pendiente</span>
+                        </div>
+                        <span className="font-semibold text-[#1F1C19]">${paymentSummary.totalPending.toLocaleString("es-CO")}</span>
+                      </div>
                     </div>
-                    <span className="font-semibold text-[#D9D1C5]">$70.000.000</span>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
 
-              {/* Widget 3: Tareas Pendientes (Simulado M2) */}
-              <div className="z-0 rounded-2xl border border-dashed border-[#E8E2D5] bg-white p-4 shadow-inner opacity-80 sm:p-6">
+              {/* código nuevo edición — Widget de Tareas Pendientes con datos reales de la API.
+              Antes mostraba tareas simuladas hardcodeadas (menú degustación, cronograma, etc.).
+              Ahora muestra hasta 5 tareas pendientes reales de todos los eventos del usuario.
+              Si no hay tareas pendientes, muestra un mensaje vacío amigable. */}
+              <div className="z-0 rounded-2xl border border-[#E8E2D5] bg-white p-4 shadow-xs sm:p-6">
                 <div className="mb-4 flex items-center justify-between sm:mb-5">
-                  <h2 className="text-xs font-bold tracking-wide text-[#B3ABA0] sm:text-sm">(Simulado M2) Tareas</h2>
+                  <h2 className="text-xs font-bold tracking-wide text-[#1F1C19] sm:text-sm">Tareas Pendientes</h2>
                   <button
                     onClick={() => setActiveTab("tareas")}
-                    className="text-[11px] font-semibold text-[#B3ABA0] hover:underline"
+                    className="text-[11px] font-semibold text-[#A07D38] hover:underline"
                   >
                     Ver todas
                   </button>
                 </div>
-                <div className="space-y-3 opacity-60">
-                  {pendingTasksSimulated.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-start gap-3 rounded-xl border border-[#F0EBE1] bg-[#FAF8F5] p-3 transition-colors hover:bg-white hover:shadow-xs"
-                    >
-                      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-[#D9D1C5] text-[#D9D1C5] focus:ring-[#EFEBE4]" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-[#B3ABA0]">{t.title}</p>
-                        <p className="truncate text-[10px] text-[#D9D1C5]">{t.couple}</p>
+                {loading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-14 animate-pulse rounded-xl bg-[#F5F2EB]" />
+                    ))}
+                  </div>
+                ) : pendingTasksList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <CheckSquare className="mb-2 h-8 w-8 text-[#D9D1C5]" />
+                    <p className="text-xs text-[#7A7167]">No hay tareas pendientes</p>
+                    <p className="text-[10px] text-[#B3ABA0]">Todas las tareas están completadas</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingTasksList.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-start gap-3 rounded-xl border border-[#F0EBE1] bg-[#FAF8F5] p-3 transition-colors hover:bg-white hover:shadow-xs"
+                      >
+                        <div className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border border-[#C9A96A]/40 bg-[#FAF4EA]" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-[#1F1C19]">{t.title}</p>
+                          <p className="truncate text-[10px] text-[#7A7167]">{t.couple}</p>
+                        </div>
+                        <span className="shrink-0 rounded-md bg-[#FAF4EA] px-2 py-0.5 text-[10px] font-medium text-[#A07D38]">
+                          {t.date}
+                        </span>
                       </div>
-                      <span className="shrink-0 rounded-md bg-[#F5F2EB] px-2 py-0.5 text-[10px] font-medium text-[#B3ABA0]">
-                        {t.date}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </>

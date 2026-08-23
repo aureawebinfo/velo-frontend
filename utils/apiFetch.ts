@@ -58,16 +58,19 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
           // Si el refresh falla (ej: expiró a los 7 días), matar sesión
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refreshToken");
+          document.cookie = "accessToken=; path=/; max-age=0";
           window.location.href = "/login";
         }
       } catch (err) {
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
+        document.cookie = "accessToken=; path=/; max-age=0";
         window.location.href = "/login";
       }
     } else {
       // Si no hay refresh token, mandar al login
       localStorage.removeItem("accessToken");
+      document.cookie = "accessToken=; path=/; max-age=0";
       window.location.href = "/login";
     }
   }
