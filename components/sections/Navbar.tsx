@@ -42,7 +42,7 @@ export default function Navbar() {
           onMouseEnter={() => window.dispatchEvent(new CustomEvent("feather-enter"))}
           onMouseLeave={() => window.dispatchEvent(new CustomEvent("feather-leave"))}
           aria-label="Abrir menú"
-          className="flex items-center gap-3 cursor-none force-cursor-none text-foreground/90 transition-colors hover:text-accent"
+          className="flex items-center gap-3 text-foreground/90 transition-colors hover:text-accent"
         >
           
           <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-background/40 backdrop-blur-sm">

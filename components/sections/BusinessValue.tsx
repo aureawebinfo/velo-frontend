@@ -101,7 +101,7 @@ export default function BusinessValue({ className }: SectionProps) {
       {/* Fondo */}
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
         <Image
-          src="/images/BusinessValue.png"
+          src="/images/BusinessValue.webp"
           alt=""
           fill
           quality={100}
@@ -110,6 +110,8 @@ export default function BusinessValue({ className }: SectionProps) {
         <div className="absolute inset-0 bg-white/30" />
       </div>
 
+      {/* Degradado superior para fusionar con la sección blanca de arriba */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-16 sm:h-24 bg-gradient-to-b from-white via-white/80 to-transparent" />
       <div className="mx-auto max-w-6xl">
         {/* Encabezado */}
         <div className="mb-14 lg:mb-16 flex flex-col items-center text-center">

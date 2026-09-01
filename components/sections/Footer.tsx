@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 // ─── Config ──────────────────────────────────────────────────────────────
 const FOOTER_VIDEO = "/videos/video_hero.mp4";
-const FOOTER_IMAGE = "/images/hero1.png";
+const FOOTER_IMAGE = "/images/hero/hero1.webp";
 
 const FLOWER_FRAME_MAX_CHECK = 5;
 const FLOWER_FRAME_INTERVAL_MS = 110;
@@ -48,15 +48,15 @@ const NAV_COLUMNS: {
     title: "CONTACTO",
     links: [
       { label: "Solicita tu demo", href: "#cta" },
-      { 
-        label: "Escríbenos al WhatsApp", 
-        href: "https://wa.me/573002477019?text=Hola%20%C3%81urea,%20me%20gustar%C3%ADa%20recibir%20m%C3%A1s%20informaci%C3%B3n.", 
-        target: "_blank" 
+      {
+        label: "Escríbenos al WhatsApp",
+        href: "https://wa.me/573002477019?text=Hola%20%C3%81urea,%20me%20gustar%C3%ADa%20recibir%20m%C3%A1s%20informaci%C3%B3n.",
+        target: "_blank",
       },
       {
         label: "Cómo llegar",
         href: "https://www.google.com/maps/search/?api=1&query=Aurea+Web+Colombia",
-        target: "_blank"
+        target: "_blank",
       },
       { label: "Portal de novios", href: "/app/login" },
     ],
@@ -97,14 +97,40 @@ export function Footer() {
   const [reduceMotion, setReduceMotion] = useState(false);
 
   // ── Spotlight con el cursor: perfora la imagen para revelar el video ──
-  const [revealPos, setRevealPos] = useState<{ x: number; y: number } | null>(
+  const [revealPos, setRevealPos] = useState<{ x: number; y: number; alpha: number } | null>(
     null
   );
 
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     const rect = footerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setRevealPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Calcular distancia exacta desde el cursor hasta la esquina inferior derecha
+    const cornerX = rect.width;
+    const cornerY = rect.height;
+    const distanceToCorner = Math.sqrt(
+      Math.pow(cornerX - x, 2) + Math.pow(cornerY - y, 2)
+    );
+
+    let alpha = 0; // 0 = linterna encendida (revela todo)
+    
+    // Distancias para el efecto (puedes ajustarlas si lo necesitas)
+    const FADE_START = 600; // A 600px de la esquina, empieza a perder fuerza
+    const FADE_END = 300;   // A 300px o menos, se bloquea TOTALMENTE (100% oculto)
+
+    if (distanceToCorner < FADE_START) {
+      if (distanceToCorner <= FADE_END) {
+        alpha = 1; // Apagado total en la zona de la marca de agua
+      } else {
+        // Transición suave entre 600px y 300px
+        alpha = 1 - ((distanceToCorner - FADE_END) / (FADE_START - FADE_END));
+      }
+    }
+
+    setRevealPos({ x, y, alpha });
   };
 
   const handleMouseLeave = () => setRevealPos(null);
@@ -112,9 +138,14 @@ export function Footer() {
   const revealMaskStyle = useMemo<React.CSSProperties | undefined>(() => {
     const x = revealPos ? `${revealPos.x}px` : "-9999px";
     const y = revealPos ? `${revealPos.y}px` : "-9999px";
+    const alpha = revealPos ? revealPos.alpha : 0;
+
+    // Una sola máscara dinámica que "rellena" el agujero con alpha cuando te acercas a la esquina
+    const spotlightMask = `radial-gradient(circle ${REVEAL_RADIUS_PX}px at ${x} ${y}, rgba(0,0,0,${alpha}) 0%, rgba(0,0,0,${alpha}) 55%, rgba(0,0,0,1) 100%)`;
+
     return {
-      WebkitMaskImage: `radial-gradient(circle ${REVEAL_RADIUS_PX}px at ${x} ${y}, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 55%, rgba(0,0,0,1) 100%)`,
-      maskImage: `radial-gradient(circle ${REVEAL_RADIUS_PX}px at ${x} ${y}, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 55%, rgba(0,0,0,1) 100%)`,
+      WebkitMaskImage: spotlightMask,
+      maskImage: spotlightMask,
     };
   }, [revealPos]);
 
@@ -227,7 +258,7 @@ export function Footer() {
       ref={footerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="relative w-full overflow-hidden bg-black text-[#EFE6D2] cursor-none [&_a]:cursor-none [&_button]:cursor-none"
+      className="relative w-full overflow-hidden bg-black text-[#EFE6D2]  [&_a]: [&_button]:"
     >
       {/* Entrada suave desde la sección anterior */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-gradient-to-b from-black via-black/85 to-transparent z-[1]" />
@@ -245,7 +276,7 @@ export function Footer() {
           preload="auto"
         />
 
-        {/* Imagen estática: cubre todo, salvo el círculo bajo el cursor donde se ve el video */}
+        {/* Imagen estática: cubre todo, pero ahora la máscara protege la esquina inferior derecha */}
         <img
           src={FOOTER_IMAGE}
           alt=""
@@ -259,9 +290,8 @@ export function Footer() {
         <div className="absolute inset-0 bg-black/60" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(201,169,106,0.08),transparent_60%)]" />
         <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#C9A96A]/40 to-transparent" />
-
-        {/* Bloquea la marca de agua del video, solo en esa esquina */}
-        <div className="absolute bottom-0 right-0 z-[1] h-24 w-40 bg-gradient-to-tl from-black via-black/80 to-transparent" />
+        
+        {/* ELIMINADO: Ya no necesitas el div oscuro de h-24 w-40 aquí */}
       </div>
 
       {/* ── Contenido ────────────────────────────────────────────────── */}
@@ -396,21 +426,27 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-4 border-t border-[#C9A96A]/15 pt-5 text-xs text-[#B9AF9B] sm:flex-row">
           <p>
             &copy; {new Date().getFullYear()}{" "}
-            <a 
-              href="https://aurea-web.com" 
-              target="_blank" 
+            <a
+              href="https://aurea-web.com"
+              target="_blank"
               rel="noopener noreferrer"
-              className="cursor-none font-medium text-[#C9A96A] transition-colors hover:text-[#EFE6D2]"
+              className=" font-medium text-[#C9A96A] transition-colors hover:text-[#EFE6D2]"
             >
-              Aurea
+              Aurea Web
             </a>
             . Todos los derechos reservados.
           </p>
           <div className="flex items-center gap-6">
-            <a href="/privacidad" className="cursor-none transition-colors duration-300 hover:text-[#EFE6D2]">
+            <a
+              href="/privacidad"
+              className=" transition-colors duration-300 hover:text-[#EFE6D2]"
+            >
               Política de privacidad
             </a>
-            <a href="/terminos" className="cursor-none transition-colors duration-300 hover:text-[#EFE6D2]">
+            <a
+              href="/terminos"
+              className=" transition-colors duration-300 hover:text-[#EFE6D2]"
+            >
               Términos y condiciones
             </a>
           </div>
