@@ -255,7 +255,7 @@ export default function RegisterPage() {
         </motion.div>
       </div>
 
-      {/* ===== Columna Derecha: Mármol Blanco con Efectos Visibles ===== */}
+      {/*  Columna Derecha: Mármol Blanco con Efectos Visibles  */}
       <div className="relative hidden w-1/2 lg:block border-l border-[#C9A96A]/20 bg-[#E8E2D9] overflow-hidden">
         <motion.div 
           variants={imageVariants} 
