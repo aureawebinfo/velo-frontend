@@ -66,7 +66,7 @@ export default function CTASection({ className }: SectionProps) {
         </h2>
 
         <Link
-          href="https://wa.me/573002477019?text=Hola%20%C3%81urea%20Web%2C%20me%20gustar%C3%ADa%20recibir%20m%C3%A1s%20informaci%C3%B3n%20sobre%20sus%20servicios."
+          href="/login"
           className="group inline-flex items-center gap-2 text-sm font-medium tracking-wide text-foreground/80 transition-colors hover:text-accent"
         >
           <span className="h-px w-8 bg-accent/50 transition-all duration-300 group-hover:w-12 group-hover:bg-accent" />
