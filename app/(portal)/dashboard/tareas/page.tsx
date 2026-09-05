@@ -95,14 +95,11 @@ export default function TareasPageUnificada() {
       if (res?.ok) {
         setTasks(await res.json());
       } else {
-        // Simulación si falla la API
-        setTasks([
-          { id: "1", title: "Confirmar menú degustación final", description: "Revisión de alérgenos y opciones vegetarianas", status: "PENDING", dueDate: "2025-05-15", createdAt: "2024-11-01" },
-          { id: "2", title: "Enviar cronograma detallado a fotógrafos", description: "Incluir localizaciones y tiempos de traslado", status: "COMPLETED", dueDate: "2025-05-10", createdAt: "2024-11-01" },
-          { id: "3", title: "Reunión de coordinación técnica en Venue", description: "Revisión de iluminación y sonido", status: "PENDING", dueDate: "2025-06-01", createdAt: "2024-12-10" },
-        ]);
+        setTasks([]);
       }
-    } catch { /* ignore */ } finally {
+    } catch {
+      setTasks([]);
+    } finally {
       setLoading(false);
     }
   }, [event]);

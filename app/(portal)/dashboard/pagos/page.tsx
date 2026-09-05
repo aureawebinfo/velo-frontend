@@ -124,12 +124,7 @@ export default function PagosPageUnificada() {
       if (listRes?.ok) {
         setPayments(await listRes.json());
       } else {
-        // Simulación si falla la API real
-        setPayments([
-          { id: "1", description: "Reserva del salón - Hacienda Rosal", amount: 15000000, status: "PAID", dueDate: "2024-12-01", paidAt: "2024-12-05", createdAt: "2024-11-01" },
-          { id: "2", description: "Segundo pago Catering - Maria & Juan", amount: 8000000, status: "PENDING", dueDate: "2025-05-15", paidAt: null, createdAt: "2024-11-01" },
-          { id: "3", description: "Decoración floral - Anticipo", amount: 3500000, status: "PENDING", dueDate: "2025-06-01", paidAt: null, createdAt: "2024-12-10" },
-        ]);
+        setPayments([]);
       }
       
       if (summaryRes?.ok) {
@@ -142,8 +137,7 @@ export default function PagosPageUnificada() {
           pendingCount: raw.countPending,
         });
       } else {
-        // Simulación de resumen
-        setSummary({ total: 26500000, paid: 15000000, pending: 11500000, paidCount: 1, pendingCount: 2 });
+        setSummary({ total: 0, paid: 0, pending: 0, paidCount: 0, pendingCount: 0 });
       }
     } catch {
       setErrorCarga("Error al conectar con el servicio de pagos.");
@@ -204,7 +198,7 @@ export default function PagosPageUnificada() {
         );
         loadPayments();
       }
-    } catch { /* ignore */ }
+    } catch { /* error manejado por la UI */ }
   }
 
   async function handleCancel(id: string) {
@@ -220,7 +214,7 @@ export default function PagosPageUnificada() {
         );
         loadPayments();
       }
-    } catch { /* ignore */ }
+    } catch { /* error manejado por la UI */ }
   }
 
   function startEdit(p: Payment) {
@@ -250,7 +244,7 @@ export default function PagosPageUnificada() {
         setEditingId(null);
         loadPayments();
       }
-    } catch { /* ignore */ }
+    } catch { /* error manejado por la UI */ }
   }
 
   // ---- Lógica de UI ----

@@ -16,7 +16,8 @@ import {
   ClipboardList,
   FileText,
 } from "lucide-react";
-import { cn } from "@/lib/cn"; // Helper estándar de Tailwind
+import { cn } from "@/lib/cn";
+import { apiFetch } from "@/utils/apiFetch";
 
 // ---------------------------------------------------------------------------
 // Tipos e Interfaces (Se mantienen igual)
@@ -36,13 +37,6 @@ type VistaEstado = "cargando" | "vacio" | "error" | "listo";
 // ---------------------------------------------------------------------------
 // Configuración y Helpers (Adaptados al diseño unificado)
 // ---------------------------------------------------------------------------
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-// Helpers de auth (localStorage)
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
-}
 
 // Icono + color satinado sutil según tipo de notificación
 function datosPorTipo(type: string) {
@@ -150,18 +144,7 @@ export default function NotificacionesPageUnificada() {
   const cargarNotificaciones = async () => {
     setVista("cargando");
     try {
-      const token = getAccessToken();
-      if (!token) {
-        setVista("error");
-        return;
-      }
-
-      const res = await fetch(`${API_URL}/notifications`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await apiFetch("/notifications");
 
       if (!res.ok) {
         throw new Error(res.status === 401 ? "Sesión expirada" : `Error (${res.status})`);
@@ -194,15 +177,8 @@ export default function NotificacionesPageUnificada() {
     setMarcandoIds((prev) => new Set(prev).add(notif.id));
 
     try {
-      const token = getAccessToken();
-      if (!token) return;
-
-      const res = await fetch(`${API_URL}/notifications/${notif.id}/read`, {
+      const res = await apiFetch(`/notifications/${notif.id}/read`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (!res.ok) {

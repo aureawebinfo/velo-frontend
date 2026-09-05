@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/utils/apiFetch";
-import { Calendar, ChevronRight, Sparkles, AlertTriangle, LogOut } from "lucide-react";
+import { Calendar, ChevronRight, Sparkles, AlertTriangle, LogOut, Plus, X } from "lucide-react";
 
 // Tipo basado en el esquema de la base de datos (Plan M1)
 interface EventData {
@@ -31,6 +31,16 @@ export default function SelectEventPage() {
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // código nuevo edición — Estados para el modal de crear evento.
+  // controla si el modal está abierto, los campos del formulario, el estado de carga y errores.
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formDate, setFormDate] = useState("");
+  const [formLocation, setFormLocation] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -70,6 +80,62 @@ export default function SelectEventPage() {
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("selectedEventId");
     router.push("/login");
+  };
+
+  // código nuevo edición — Función para recargar la lista de eventos desde la API.
+  // Se usa después de crear un evento para mostrar el nuevo en la lista sin recargar la página.
+  const reloadEvents = async () => {
+    try {
+      const res = await apiFetch("/events");
+      if (res.ok) {
+        const data: EventData[] = await res.json();
+        setEvents(data);
+      }
+    } catch {
+      // Silencioso: si falla, la lista se queda como está
+    }
+  };
+
+  // código nuevo edición — Función para manejar el envío del formulario de crear evento.
+  // Solo envía el nombre al backend (POST /events). Los otros campos se guardan localmente
+  // pero no se envían porque el backend aún no los soporta. Cuando el backend soporte más campos,
+  // solo hay que agregarlos al objeto que se envía en el body.
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!formName.trim()) {
+      setFormError("El nombre del evento es obligatorio.");
+      return;
+    }
+
+    setFormLoading(true);
+    try {
+      const res = await apiFetch("/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: formName.trim() }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.message || "No se pudo crear el evento.");
+      }
+
+      // Limpiar formulario y cerrar modal
+      setFormName("");
+      setFormDate("");
+      setFormLocation("");
+      setFormDescription("");
+      setShowCreateModal(false);
+
+      // Recargar la lista para mostrar el evento recién creado
+      await reloadEvents();
+    } catch (err: any) {
+      setFormError(err.message || "Error al crear el evento.");
+    } finally {
+      setFormLoading(false);
+    }
   };
 
   if (loading) {
@@ -157,7 +223,135 @@ export default function SelectEventPage() {
           </div>
         )}
 
+        {/* código nuevo edición — Botón para abrir el modal de crear evento.
+        Aparece debajo de la lista de eventos o del estado vacío.
+        Usa estilo borde punteado dorado para diferenciarse de las tarjetas de eventos existentes. */}
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="mt-6 w-full flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#C9A96A]/40 bg-white/60 p-4 text-[#A07D38] transition-all duration-300 hover:border-[#C9A96A] hover:bg-[#FAF4EA] hover:shadow-sm"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="text-sm font-semibold">Crear nuevo evento</span>
+        </button>
+
       </div>
+
+      {/* código nuevo edición — Modal para crear evento.
+      Se muestra cuando showCreateModal es true.
+      Overlay oscuro con backdrop-blur, card blanca con formulario.
+      Solo el nombre es requerido. Los otros campos son opcionales y se envían cuando el backend los soporte. */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Overlay oscuro */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-xs"
+            onClick={() => !formLoading && setShowCreateModal(false)}
+          />
+
+          {/* Card del modal */}
+          <div className="relative z-10 w-full max-w-md rounded-3xl border border-[#E8E2D5] bg-white p-6 shadow-2xl animate-fade-up sm:p-8">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-[#1F1C19]" style={{ fontFamily: "var(--font-title-serif, 'Playfair Display', serif)" }}>
+                  Crear nuevo evento
+                </h2>
+                <p className="text-xs text-[#7A7167] mt-1">Completa los datos para comenzar.</p>
+              </div>
+              <button
+                onClick={() => !formLoading && setShowCreateModal(false)}
+                className="rounded-full p-2 text-[#7A7167] hover:bg-[#F5F2EB] hover:text-[#1F1C19] transition-colors"
+                disabled={formLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleCreateEvent} className="space-y-4">
+              {/* Nombre (requerido) */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#7A7167] mb-1.5">
+                  Nombre del evento *
+                </label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="Ej: Boda María y José"
+                  required
+                  className="w-full rounded-lg border border-[#D9D1C5] bg-white px-3.5 py-2.5 text-sm text-[#2C2723] placeholder-[#A89F95] transition-all focus:border-[#C9A96A] focus:outline-none focus:ring-2 focus:ring-[#C9A96A]/20"
+                />
+              </div>
+
+              {/* Fecha del evento (opcional) */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#7A7167] mb-1.5">
+                  Fecha del evento
+                </label>
+                <input
+                  type="date"
+                  value={formDate}
+                  onChange={(e) => setFormDate(e.target.value)}
+                  className="w-full rounded-lg border border-[#D9D1C5] bg-white px-3.5 py-2.5 text-sm text-[#2C2723] transition-all focus:border-[#C9A96A] focus:outline-none focus:ring-2 focus:ring-[#C9A96A]/20"
+                />
+              </div>
+
+              {/* Locación (opcional) */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#7A7167] mb-1.5">
+                  Locación
+                </label>
+                <input
+                  type="text"
+                  value={formLocation}
+                  onChange={(e) => setFormLocation(e.target.value)}
+                  placeholder="Ej: Hacienda El Rosal"
+                  className="w-full rounded-lg border border-[#D9D1C5] bg-white px-3.5 py-2.5 text-sm text-[#2C2723] placeholder-[#A89F95] transition-all focus:border-[#C9A96A] focus:outline-none focus:ring-2 focus:ring-[#C9A96A]/20"
+                />
+              </div>
+
+              {/* Descripción (opcional) */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#7A7167] mb-1.5">
+                  Descripción
+                </label>
+                <textarea
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder="Detalles adicionales del evento..."
+                  rows={3}
+                  className="w-full rounded-lg border border-[#D9D1C5] bg-white px-3.5 py-2.5 text-sm text-[#2C2723] placeholder-[#A89F95] transition-all focus:border-[#C9A96A] focus:outline-none focus:ring-2 focus:ring-[#C9A96A]/20 resize-none"
+                />
+              </div>
+
+              {/* Error */}
+              {formError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>
+              )}
+
+              {/* Botón submit */}
+              <button
+                type="submit"
+                disabled={formLoading}
+                className="w-full rounded-lg bg-[#C9A96A] px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-[#B8963D] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {formLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Crear evento
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

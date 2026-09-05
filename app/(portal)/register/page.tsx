@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
 import Image from "next/image";
-import { API_URL } from "@/utils/apiFetch";
+import { API_URL, apiFetch, decodeJwt } from "@/utils/apiFetch";
 import { AmbientLines } from "@/components/effects/FloatingPaths";
 import SideRays from "@/components/effects/SideRays";
 
@@ -80,7 +80,35 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      localStorage.setItem("accessToken", "mock.access.token");
+      const response = await apiFetch("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error("Este correo ya está registrado.");
+        }
+        throw new Error("Error en el servidor al intentar crear la cuenta.");
+      }
+
+      const data = await response.json();
+
+      // Guardar tokens reales emitidos por el backend
+      if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
+      if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
+
+      // Cookie para que el middleware de Next.js pueda verificar la sesión
+      if (data.accessToken) {
+        document.cookie = `accessToken=${data.accessToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+      }
+
+      // Guardar userId desde el JWT para chat y documentos
+      if (data.accessToken) {
+        const payload = decodeJwt(data.accessToken);
+        if (payload?.sub) localStorage.setItem("userId", payload.sub);
+      }
+
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al registrarse");

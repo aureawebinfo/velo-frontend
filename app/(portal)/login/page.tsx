@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
 import Image from "next/image";
-import { apiFetch, API_URL } from "@/utils/apiFetch";
+import { apiFetch, API_URL, decodeJwt } from "@/utils/apiFetch";
 import { AmbientLines } from "@/components/effects/FloatingPaths";
 import SideRays from "@/components/effects/SideRays";
 
@@ -73,11 +73,21 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
+      
+      // Guardar tokens reales emitidos por el backend
+      if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
+      if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
 
-      if (data.accessToken)
-        localStorage.setItem("accessToken", data.accessToken);
-      if (data.refreshToken)
-        localStorage.setItem("refreshToken", data.refreshToken);
+      // Cookie para que el middleware de Next.js pueda verificar la sesión
+      if (data.accessToken) {
+        document.cookie = `accessToken=${data.accessToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+      }
+
+      // Guardar userId desde el JWT para chat y documentos
+      if (data.accessToken) {
+        const payload = decodeJwt(data.accessToken);
+        if (payload?.sub) localStorage.setItem("userId", payload.sub);
+      }
 
       router.push("/dashboard");
     } catch (err: unknown) {

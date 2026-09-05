@@ -1,2 +1,5 @@
 .next/
 node_modules/
+.env.local
+tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
