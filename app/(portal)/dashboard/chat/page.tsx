@@ -6,7 +6,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Send, Loader2, AlertTriangle, RefreshCw, MessageCircle } from "lucide-react";
-import { cn } from "@/lib/cn"; // Asegúrate de tener este helper, si no, usa className estándar
+import { cn } from "@/lib/cn";
+import { apiFetch } from "@/utils/apiFetch";
 
 // ---------------------------------------------------------------------------
 // Tipos e Interfaces (Se mantienen igual)
@@ -31,14 +32,7 @@ type VistaChat = "cargando" | "vacio" | "error" | "listo";
 // ---------------------------------------------------------------------------
 // Configuración y Helpers (Adaptados al diseño unificado)
 // ---------------------------------------------------------------------------
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const POLLING_INTERVAL = 10000; // 10 segundos
-
-// Helpers de auth (localStorage)
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
-}
 
 function getSelectedEventId(): string | null {
   if (typeof window === "undefined") return null;
@@ -182,14 +176,11 @@ export default function ChatPage() {
 
   // ---- Carga inicial ----
   useEffect(() => {
-    const token = getAccessToken();
     const eventId = getSelectedEventId();
-    if (!token || !eventId) { setVista("error"); return; }
+    if (!eventId) { setVista("error"); return; }
 
     let cancelado = false;
-    fetch(`${API_URL}/events/${eventId}/messages?page=1&limit=50`, {
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    })
+    apiFetch(`/events/${eventId}/messages?page=1&limit=50`)
       .then((res) => res.json())
       .then((json: MensajesResponse) => {
         if (!cancelado) {
@@ -209,13 +200,10 @@ export default function ChatPage() {
 
     const hacerPolling = async () => {
       try {
-        const token = getAccessToken();
         const eventId = getSelectedEventId();
-        if (!token || !eventId) return;
+        if (!eventId) return;
 
-        const res = await fetch(`${API_URL}/events/${eventId}/messages?page=1&limit=50`, {
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch(`/events/${eventId}/messages?page=1&limit=50`);
 
         if (!res.ok) return;
 
@@ -257,19 +245,14 @@ export default function ChatPage() {
     setErrorEnvio(null);
 
     try {
-      const token = getAccessToken();
       const eventId = getSelectedEventId();
 
-      if (!token || !eventId) {
+      if (!eventId) {
         throw new Error("No hay sesión activa o evento seleccionado.");
       }
 
-      const res = await fetch(`${API_URL}/events/${eventId}/messages`, {
+      const res = await apiFetch(`/events/${eventId}/messages`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ message: mensajeTexto }),
       });
 
@@ -277,9 +260,7 @@ export default function ChatPage() {
         throw new Error(res.status === 401 ? "Sesión expirada" : `Error del servidor (${res.status})`);
       }
 
-      const refreshRes = await fetch(`${API_URL}/events/${eventId}/messages?page=1&limit=50`, {
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      });
+      const refreshRes = await apiFetch(`/events/${eventId}/messages?page=1&limit=50`);
 
       if (refreshRes.ok) {
         const json: MensajesResponse = await refreshRes.json();
