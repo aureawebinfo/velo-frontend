@@ -22,7 +22,8 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
-import { cn } from "@/lib/cn"; // Helper estándar de Tailwind
+import { cn } from "@/lib/cn";
+import { apiFetch, API_URL } from "@/utils/apiFetch";
 
 // ---------------------------------------------------------------------------
 // Tipos e Interfaces (Se mantienen igual)
@@ -31,6 +32,8 @@ interface Documento {
   id: string;
   name: string;
   fileUrl?: string;
+  filePath?: string;
+  type?: string;
   extension?: string;
   size?: string;
   createdAt?: string;
@@ -50,13 +53,6 @@ interface InfoExtension {
 // Configuración y Helpers (Adaptados al diseño unificado)
 // ---------------------------------------------------------------------------
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-// Helpers de auth (localStorage)
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
-}
 
 function getSelectedEventId(): string | null {
   if (typeof window === "undefined") return null;
@@ -347,26 +343,26 @@ export default function DocumentosPageUnificada() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteExito, setDeleteExito] = useState<string | null>(null);
 
-  // ---- Carga inicial ----
-  useEffect(() => {
-    const token = getAccessToken();
+  // ---- Carga de documentos ----
+  // código nuevo edición
+  // Extrae la lógica de carga en una función reutilizable para el useEffect inicial
+  // y para el botón de reintentar que aparece cuando hay un error.
+  const loadDocuments = async () => {
     const eventId = getSelectedEventId();
-    if (!token || !eventId) { setVista("error"); return; }
+    if (!eventId) { setVista("error"); return; }
 
-    let cancelado = false;
-    fetch(`${API_URL}/events/${eventId}/documents`, {
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data: Documento[]) => { 
-        if (!cancelado) { 
-          setDocumentos(Array.isArray(data) ? data : []); 
-          setVista(Array.isArray(data) && data.length > 0 ? "listo" : "vacio"); 
-        } 
-      })
-      .catch(() => { if (!cancelado) setVista("error"); });
+    try {
+      const res = await apiFetch(`/events/${eventId}/documents`);
+      const data: Documento[] = await res.json();
+      setDocumentos(Array.isArray(data) ? data : []);
+      setVista(Array.isArray(data) && data.length > 0 ? "listo" : "vacio");
+    } catch {
+      setVista("error");
+    }
+  };
 
-    return () => { cancelado = true; };
+  useEffect(() => {
+    loadDocuments();
   }, []);
 
   // ---- Filtrado ----
@@ -378,12 +374,21 @@ export default function DocumentosPageUnificada() {
 
   // ---- Handlers de tarjetas ----
   const handlePreview = (doc: Documento) => {
-    if (doc.fileUrl) window.open(doc.fileUrl, "_blank");
+    const eventId = getSelectedEventId();
+    if (eventId) {
+      // código nuevo edición
+      // Construye la URL completa del endpoint de descarga del backend.
+      // Esto reemplaza el uso de doc.fileUrl que no existía en la respuesta de la API.
+      window.open(`${API_URL}/events/${eventId}/documents/${doc.id}/download`, "_blank");
+    }
   };
   const handleDownload = (doc: Documento) => {
-    if (doc.fileUrl) {
+    const eventId = getSelectedEventId();
+    if (eventId) {
+      // código nuevo edición
+      // Descarga el archivo usando el endpoint real del backend en vez de doc.fileUrl.
       const a = document.createElement("a");
-      a.href = doc.fileUrl;
+      a.href = `${API_URL}/events/${eventId}/documents/${doc.id}/download`;
       a.download = doc.name;
       a.click();
     }
@@ -399,13 +404,11 @@ export default function DocumentosPageUnificada() {
     setEliminando(true);
 
     try {
-      const token = getAccessToken();
       const eventId = getSelectedEventId();
-      if (!token || !eventId) throw new Error("No hay sesión activa.");
+      if (!eventId) throw new Error("No hay sesión activa.");
 
-      const res = await fetch(`${API_URL}/events/${eventId}/documents/${docAEliminar.id}`, {
+      const res = await apiFetch(`/events/${eventId}/documents/${docAEliminar.id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) throw new Error(`Error del servidor (${res.status})`);
@@ -442,25 +445,21 @@ export default function DocumentosPageUnificada() {
     setUploadError(null);
 
     try {
-      const token = getAccessToken();
       const eventId = getSelectedEventId();
-      if (!token || !eventId) throw new Error("No hay sesión activa.");
+      if (!eventId) throw new Error("No hay sesión activa.");
 
       const formData = new FormData();
       formData.append("file", archivo);
       formData.append("name", archivo.name);
 
-      const res = await fetch(`${API_URL}/events/${eventId}/documents`, {
+      const res = await apiFetch(`/events/${eventId}/documents`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
       if (!res.ok) throw new Error(`Error del servidor (${res.status})`);
 
-      const refreshRes = await fetch(`${API_URL}/events/${eventId}/documents`, {
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      });
+      const refreshRes = await apiFetch(`/events/${eventId}/documents`);
 
       if (refreshRes.ok) {
         const data: Documento[] = await refreshRes.json();
@@ -631,7 +630,7 @@ export default function DocumentosPageUnificada() {
             </div>
             <h3 className="text-sm font-semibold mb-1 text-[#1F1C19]">No pudimos cargar tus documentos</h3>
             <p className="text-xs mb-5 max-w-xs text-[#7A7167]">Revisa tu conexión e inténtalo de nuevo.</p>
-            <button onClick={() => setVista("listo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-accent text-white transition-all hover:bg-accent/90">
+            <button onClick={() => { setVista("cargando"); loadDocuments(); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-accent text-white transition-all hover:bg-accent/90">
               <RefreshCw size={14} /> Reintentar
             </button>
           </div>

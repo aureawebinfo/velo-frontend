@@ -1,5 +1,4 @@
 "use client";
-
 import React, {
   Children,
   cloneElement,
@@ -8,6 +7,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useCallback,
 } from "react";
 import gsap from "gsap";
 import { cn } from "@/lib/cn";
@@ -35,7 +35,7 @@ const makeSlot = (i: number, distX: number, distY: number, total: number) => ({
   zIndex: total - i,
 });
 
-const placeNow = (el: any, slot: any, skew: number) =>
+const placeNow = (el: any, slot: any, skew: number, enableGPU: boolean = true) =>
   gsap.set(el, {
     x: slot.x,
     y: slot.y,
@@ -45,7 +45,7 @@ const placeNow = (el: any, slot: any, skew: number) =>
     skewY: skew,
     transformOrigin: "center center",
     zIndex: slot.zIndex,
-    force3D: true,
+    force3D: enableGPU,
   });
 
 interface CardSwapProps {
@@ -60,6 +60,7 @@ interface CardSwapProps {
   easing?: "elastic" | "smooth";
   children: React.ReactNode;
   className?: string;
+  enableGPU?: boolean;
 }
 
 const CardSwap = ({
@@ -67,32 +68,35 @@ const CardSwap = ({
   height = 400,
   cardDistance = 60,
   verticalDistance = 70,
-  delay = 5000,
+  delay = 3500,
   pauseOnHover = false,
   onCardClick,
   skewAmount = 6,
-  easing = "elastic",
+  easing = "smooth",
+  enableGPU = true,
   children,
   className,
 }: CardSwapProps) => {
-  const config =
-    easing === "elastic"
+  // Optimized config - duraciones MUCHO más rápidas
+  const config = useMemo(() => {
+    return easing === "elastic"
       ? {
           ease: "elastic.out(0.6,0.9)",
-          durDrop: 2,
-          durMove: 2,
-          durReturn: 2,
+          durDrop: 0.6, // ⬇️ Reducido de 2s a 0.6s
+          durMove: 0.6, // ⬇️ Reducido de 2s a 0.6s
+          durReturn: 0.6, // ⬇️ Reducido de 2s a 0.6s
           promoteOverlap: 0.9,
           returnDelay: 0.05,
         }
       : {
-          ease: "power1.inOut",
-          durDrop: 0.8,
-          durMove: 0.8,
-          durReturn: 0.8,
+          ease: "power2.inOut", // ⬆️ Cambio de power1 a power2 (más snappy)
+          durDrop: 0.4, // ⬇️ Reducido de 0.8s a 0.4s
+          durMove: 0.4, // ⬇️ Reducido de 0.8s a 0.4s
+          durReturn: 0.4, // ⬇️ Reducido de 0.8s a 0.4s
           promoteOverlap: 0.45,
-          returnDelay: 0.2,
+          returnDelay: 0.15,
         };
+  }, [easing]);
 
   const childArr = useMemo(() => Children.toArray(children), [children]);
   const refs = useMemo(
@@ -101,10 +105,88 @@ const CardSwap = ({
   );
 
   const order = useRef(Array.from({ length: childArr.length }, (_, i) => i));
-
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const intervalRef = useRef<number | undefined>(undefined);
   const container = useRef<HTMLDivElement>(null);
+  const isAnimatingRef = useRef(false);
+
+  // Memoizar swap para evitar recreaciones innecesarias
+  const swap = useCallback(() => {
+    if (order.current.length < 2 || isAnimatingRef.current) return;
+
+    isAnimatingRef.current = true;
+    const [front, ...rest] = order.current;
+    const elFront = refs[front].current;
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        order.current = [...rest, front];
+        isAnimatingRef.current = false;
+      },
+    });
+
+    tlRef.current = tl;
+
+    // Drop animation - mucho más rápido
+    tl.to(elFront, {
+      y: "+=500",
+      duration: config.durDrop,
+      ease: config.ease,
+    });
+
+    tl.addLabel(
+      "promote",
+      `-=${config.durDrop * config.promoteOverlap}`
+    );
+
+    // Promote otros elementos
+    rest.forEach((idx, i) => {
+      const el = refs[idx].current;
+      const slot = makeSlot(i, cardDistance, verticalDistance, refs.length);
+
+      tl.set(el, { zIndex: slot.zIndex }, "promote");
+      tl.to(
+        el,
+        {
+          x: slot.x,
+          y: slot.y,
+          z: slot.z,
+          duration: config.durMove,
+          ease: config.ease,
+        },
+        `promote+=${i * 0.1}` // ⬇️ Reducido de 0.15 a 0.1
+      );
+    });
+
+    const backSlot = makeSlot(
+      refs.length - 1,
+      cardDistance,
+      verticalDistance,
+      refs.length
+    );
+
+    tl.addLabel("return", `promote+=${config.durMove * config.returnDelay}`);
+
+    tl.call(
+      () => {
+        gsap.set(elFront, { zIndex: backSlot.zIndex });
+      },
+      undefined,
+      "return"
+    );
+
+    tl.to(
+      elFront,
+      {
+        x: backSlot.x,
+        y: backSlot.y,
+        z: backSlot.z,
+        duration: config.durReturn,
+        ease: config.ease,
+      },
+      "return"
+    );
+  }, [config, cardDistance, verticalDistance, refs]);
 
   useEffect(() => {
     const total = refs.length;
@@ -112,97 +194,39 @@ const CardSwap = ({
       placeNow(
         r.current,
         makeSlot(i, cardDistance, verticalDistance, total),
-        skewAmount
+        skewAmount,
+        enableGPU
       )
     );
 
-    const swap = () => {
-      if (order.current.length < 2) return;
-
-      const [front, ...rest] = order.current;
-      const elFront = refs[front].current;
-      const tl = gsap.timeline();
-      tlRef.current = tl;
-
-      tl.to(elFront, {
-        y: "+=500",
-        duration: config.durDrop,
-        ease: config.ease,
-      });
-
-      tl.addLabel("promote", `-=${config.durDrop * config.promoteOverlap}`);
-      rest.forEach((idx, i) => {
-        const el = refs[idx].current;
-        const slot = makeSlot(i, cardDistance, verticalDistance, refs.length);
-        tl.set(el, { zIndex: slot.zIndex }, "promote");
-        tl.to(
-          el,
-          {
-            x: slot.x,
-            y: slot.y,
-            z: slot.z,
-            duration: config.durMove,
-            ease: config.ease,
-          },
-          `promote+=${i * 0.15}`
-        );
-      });
-
-      const backSlot = makeSlot(
-        refs.length - 1,
-        cardDistance,
-        verticalDistance,
-        refs.length
-      );
-      tl.addLabel("return", `promote+=${config.durMove * config.returnDelay}`);
-      tl.call(
-        () => {
-          gsap.set(elFront, { zIndex: backSlot.zIndex });
-        },
-        undefined,
-        "return"
-      );
-      tl.to(
-        elFront,
-        {
-          x: backSlot.x,
-          y: backSlot.y,
-          z: backSlot.z,
-          duration: config.durReturn,
-          ease: config.ease,
-        },
-        "return"
-      );
-
-      tl.call(() => {
-        order.current = [...rest, front];
-      });
-    };
-
-    // Empieza a pasar las tarjetas con la velocidad indicada
+    // Inicia la secuencia más rápido (200ms vs 500ms)
     const initialTimeout = setTimeout(() => {
       swap();
       intervalRef.current = window.setInterval(swap, delay);
-    }, 500); // 500ms inicial para que cargue y luego arranca solo
+    }, 200);
 
     if (pauseOnHover) {
       const node = container.current;
+
       const pause = () => {
         tlRef.current?.pause();
         clearInterval(intervalRef.current);
       };
+
       const resume = () => {
         tlRef.current?.play();
         intervalRef.current = window.setInterval(swap, delay);
       };
+
       node?.addEventListener("mouseenter", pause);
       node?.addEventListener("mouseleave", resume);
+
       return () => {
         node?.removeEventListener("mouseenter", pause);
         node?.removeEventListener("mouseleave", resume);
         clearInterval(intervalRef.current);
         clearTimeout(initialTimeout);
-        tlRef.current?.kill(); // IMPORTANTE: Mata la animación al salir para evitar bugs
+        tlRef.current?.kill();
       };
     }
 
@@ -211,27 +235,39 @@ const CardSwap = ({
       clearTimeout(initialTimeout);
       tlRef.current?.kill();
     };
-  }, [cardDistance, verticalDistance, delay, pauseOnHover, skewAmount, easing]);
+  }, [cardDistance, verticalDistance, delay, pauseOnHover, skewAmount, enableGPU, swap]);
 
-    const rendered = childArr.map((child, i) =>
-        isValidElement(child)
-        ? cloneElement(child as React.ReactElement<any>, {
-            key: i,
-            ref: refs[i],
-            style: { width, height, ...((child.props as any).style ?? {}) },
-            onClick: (e: any) => {
-                (child.props as any).onClick?.(e);
-                onCardClick?.(i);
-            },
-            } as any) // <--- El 'as any' aquí apaga la alerta de TypeScript
-        : child
-    );
+  const rendered = childArr.map((child, i) =>
+    isValidElement(child)
+      ? cloneElement(child as React.ReactElement<any>, {
+          key: i,
+          ref: refs[i],
+          style: {
+            width,
+            height,
+            willChange: "transform",
+            ...((child.props as any).style ?? {}),
+          },
+          onClick: (e: any) => {
+            (child.props as any).onClick?.(e);
+            onCardClick?.(i);
+          },
+        } as any)
+      : child
+  );
 
   return (
     <div
       ref={container}
-      className={cn("relative [perspective:900px] overflow-visible z-10", className)}
-      style={{ width, height }}
+      className={cn(
+        "relative [perspective:900px] overflow-visible z-10",
+        className
+      )}
+      style={{
+        width,
+        height,
+        willChange: "transform", // ⬆️ Optimización extra para el contenedor
+      }}
     >
       {rendered}
     </div>

@@ -273,13 +273,13 @@ function Seal({ index, visible }: { index: number; visible: boolean }) {
             fontFamily="Georgia, 'Times New Roman', serif"
           >
             <textPath href="#aurea-seal-path">
-              ÁUREA · VELO ·
+              VELO · VELO · VELO · VELO · VELO
             </textPath>
           </text>
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-serif text-3xl text-accent lg:text-4xl">
-            Á
+            V
           </span>
         </div>
       </div>
