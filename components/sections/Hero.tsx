@@ -180,7 +180,7 @@ export default function Hero3({ className }: SectionProps) {
           sizes="100vw"
           // MÓVIL: object-cover enfocado muy a la derecha (85%) para ver la agenda
           // ESCRITORIO (md+): object-contain alineado a la derecha para verla 100% completa y alejada
-          className="object-cover object-[85%_center] md:object-contain md:object-right"
+          className="object-cover object-[85%_center] lg:object-contain lg:object-right"
         />
 
         <div className="absolute inset-0 bg-gradient-to-r from-background from-0% via-background/90 via-40% to-transparent to-70%" />
