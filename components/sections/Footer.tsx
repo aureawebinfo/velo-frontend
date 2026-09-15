@@ -12,7 +12,7 @@ const FOOTER_IMAGE = "/images/hero/hero1.webp";
 
 const FLOWER_FRAME_MAX_CHECK = 5;
 const FLOWER_FRAME_INTERVAL_MS = 110;
-const FLOWER_HOLD_MS = 1200;
+const FLOWER_HOLD_MS = 700;
 const FLOWER_CLOSE_HOLD_MS = 260;
 
 const REVEAL_RADIUS_PX = 170;
@@ -25,43 +25,43 @@ const NAV_COLUMNS: {
   title: string;
   links: { label: string; href: string; target?: string }[];
 }[] = [
-  {
-    title: "EXPLORA",
-    links: [
-      { label: "Inicio", href: "#inicio" },
-      { label: "Características", href: "#features" },
-      { label: "Beneficios", href: "#benefits" },
-      { label: "La Plataforma", href: "#product" },
-      { label: "Espacios", href: "#gallery" },
-    ],
-  },
-  {
-    title: "CONOCE MÁS",
-    links: [
-      { label: "Impacto Comercial", href: "#value" },
-      { label: "Estadísticas", href: "#stats" },
-      { label: "Testimonios", href: "#testimonials" },
-      { label: "Planes", href: "#pricing" },
-    ],
-  },
-  {
-    title: "CONTACTO",
-    links: [
-      { label: "Solicita tu demo", href: "#cta" },
-      {
-        label: "Escríbenos al WhatsApp",
-        href: "https://wa.me/573002477019?text=Hola%20%C3%81urea,%20me%20gustar%C3%ADa%20recibir%20m%C3%A1s%20informaci%C3%B3n.",
-        target: "_blank",
-      },
-      {
-        label: "Cómo llegar",
-        href: "https://www.google.com/maps/search/?api=1&query=Aurea+Web+Colombia",
-        target: "_blank",
-      },
-      { label: "Portal de novios", href: "/app/login" },
-    ],
-  },
-];
+    {
+      title: "EXPLORA",
+      links: [
+        { label: "Inicio", href: "#inicio" },
+        { label: "Características", href: "#features" },
+        { label: "Beneficios", href: "#benefits" },
+        { label: "La Plataforma", href: "#product" },
+        { label: "Espacios", href: "#gallery" },
+      ],
+    },
+    {
+      title: "CONOCE MÁS",
+      links: [
+        { label: "Impacto Comercial", href: "#value" },
+        { label: "Estadísticas", href: "#stats" },
+        { label: "Testimonios", href: "#testimonials" },
+        { label: "Planes", href: "#pricing" },
+      ],
+    },
+    {
+      title: "CONTACTO",
+      links: [
+        { label: "Solicita tu demo", href: "#cta" },
+        {
+          label: "Escríbenos al WhatsApp",
+          href: "https://wa.me/573002477019?text=Hola%20%C3%81urea,%20me%20gustar%C3%ADa%20recibir%20m%C3%A1s%20informaci%C3%B3n.",
+          target: "_blank",
+        },
+        {
+          label: "Cómo llegar",
+          href: "https://www.google.com/maps/search/?api=1&query=Aurea+Web+Colombia",
+          target: "_blank",
+        },
+        { label: "Portal de novios", href: "/app/login" },
+      ],
+    },
+  ];
 
 const SOCIAL_LINKS: { label: string; href: string; icon: ReactElement }[] = [
   {
@@ -94,8 +94,6 @@ export function Footer() {
   const [flowerFrameCount, setFlowerFrameCount] = useState(1);
   const [flowerReady, setFlowerReady] = useState(false);
   const [flowerFrame, setFlowerFrame] = useState(0);
-  const [reduceMotion, setReduceMotion] = useState(false);
-
   // ── Spotlight con el cursor: perfora la imagen para revelar el video ──
   const [revealPos, setRevealPos] = useState<{ x: number; y: number; alpha: number } | null>(
     null
@@ -116,7 +114,7 @@ export function Footer() {
     );
 
     let alpha = 0; // 0 = linterna encendida (revela todo)
-    
+
     // Distancias para el efecto (puedes ajustarlas si lo necesitas)
     const FADE_START = 600; // A 600px de la esquina, empieza a perder fuerza
     const FADE_END = 300;   // A 300px o menos, se bloquea TOTALMENTE (100% oculto)
@@ -149,13 +147,6 @@ export function Footer() {
     };
   }, [revealPos]);
 
-  // ── Reduce motion ────────────────────────────────────────────────────
-  useEffect(() => {
-    setReduceMotion(
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-  }, []);
-
   // ── El video arranca (y se queda en loop) al llegar al footer ────────
   useEffect(() => {
     const el = footerRef.current;
@@ -178,8 +169,24 @@ export function Footer() {
     if (!inView) return;
     const v = videoRef.current;
     if (!v) return;
+
+    v.muted = true;
+    v.playsInline = true;
     v.currentTime = 0;
-    v.play().catch(() => {});
+
+    const tryPlay = () => {
+      v.play().catch((err) => {
+        console.warn("Video autoplay bloqueado:", err);
+      });
+    };
+
+    if (v.readyState >= 2) {
+      tryPlay();
+    } else {
+      v.addEventListener("canplay", tryPlay, { once: true });
+    }
+
+    return () => v.removeEventListener("canplay", tryPlay);
   }, [inView]);
 
   // ── Flower: detectar frames disponibles ──────────────────────────────
@@ -218,11 +225,6 @@ export function Footer() {
   // ── Flower: flipbook idle (abre, mantiene, cierra, mantiene, repite) ──
   useEffect(() => {
     if (!flowerReady) return;
-    if (reduceMotion) {
-      setFlowerFrame(flowerFrameCount - 1);
-      return;
-    }
-
     let frame = 0;
     let direction: 1 | -1 = 1;
     let cancelled = false;
@@ -250,7 +252,7 @@ export function Footer() {
       cancelled = true;
       clearTimeout(tid);
     };
-  }, [flowerReady, flowerFrameCount, reduceMotion]);
+  }, [flowerReady, flowerFrameCount]);
 
   return (
     <footer
@@ -289,15 +291,14 @@ export function Footer() {
 
         <div className="absolute inset-0 bg-black/60" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(201,169,106,0.08),transparent_60%)]" />
-        <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#C9A96A]/40 to-transparent" />
-        
-        {/* ELIMINADO: Ya no necesitas el div oscuro de h-24 w-40 aquí */}
+
+
       </div>
 
       {/* ── Contenido ────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto max-w-[1600px] px-6 pb-6 pt-6 sm:px-10 sm:pt-8">
         {/* ── Bloque superior: tres columnas ─────────────────────────── */}
-        <div className="border-b border-[#C9A96A]/15 pb-6">
+        <div className="pb-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-4 lg:gap-6">
             {/* Columna izquierda: filosofía / cita */}
             <div className="flex flex-col items-center justify-center text-center md:items-start md:text-left">
@@ -305,7 +306,7 @@ export function Footer() {
                 Nuestra filosofía
               </span>
               <span className="mt-3 font-serif text-lg italic leading-snug text-[#EFE6D2] md:text-xl">
-                "Donde los sueños
+                "Donde los sueños{" "}
                 <br className="hidden md:block" />
                 encuentran su hogar"
               </span>
@@ -370,8 +371,8 @@ export function Footer() {
         </div>
 
         {/* ── Bloque medio: logo + columnas + redes ──────────────────── */}
-        <div className="grid grid-cols-1 gap-8 py-8 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 py-8 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="col-span-2 lg:col-span-2">
             <a
               href="https://aurea-web.com"
               target="_blank"
